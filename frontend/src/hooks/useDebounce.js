@@ -1,0 +1,16 @@
+// src/hooks/useDebounce.js
+import { useState, useEffect } from 'react';
+
+/**
+ * Returns a debounced value that updates after delay ms of no changes.
+ */
+export const useDebounce = (value, delay = 300) => {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+
+  return debounced;
+};
