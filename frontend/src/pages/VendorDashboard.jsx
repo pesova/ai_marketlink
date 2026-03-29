@@ -313,8 +313,8 @@ export default function VendorDashboard() {
   const refreshBalance = useCallback(async () => {
     const b = await fetchVendorBalance();
     setBalance({
-      escrow: typeof b?.escrow === "number" ? b.escrow : 0,
-      available: typeof b?.available === "number" ? b.available : 0,
+      escrow: b.escrow,
+      available: b.available,
     });
   }, []);
 
@@ -331,8 +331,8 @@ export default function VendorDashboard() {
       setProducts((productList || []).map(mapProductFromApi));
       setOrders((orderList || []).map(mapOrderFromApi));
       setBalance({
-        escrow: typeof b?.escrow === "number" ? b.escrow : 0,
-        available: typeof b?.available === "number" ? b.available : 0,
+        escrow: b.escrow,
+        available: b.available,
       });
     } catch (err) {
       const msg = err.response?.data?.message || err.message || "Failed to load dashboard";
@@ -366,7 +366,7 @@ export default function VendorDashboard() {
 
   /* Escrow / available from ledger API; revenue approximated from orders */
   const escrowTotal = balance.escrow;
-  const availableTotal = balance.available;
+  const availableTotal = balance.available;  
   const totalRevenue = orders
     .filter((o) =>
       ["COMPLETED", "PAID_IN_ESCROW", "SHIPPED", "DELIVERED_PENDING_CONFIRMATION"].includes(
