@@ -297,6 +297,34 @@ max_price is in Nigerian Naira (numeric). Use null when unknown.`,
     );
     await ChatHistory.deleteMany({ userId });
   }
+
+  /**
+   * Append a single assistant line (e.g. payment confirmed) without invoking the LLM.
+   * Keeps ChatSession + ChatHistory in sync with normal chat.
+   */
+  public async appendAssistantMessage(userId: string, content: string): Promise<void> {
+    const objId = new Types.ObjectId(userId);
+    let session = await ChatSession.findOne({ userId: objId });
+    const now = new Date();
+    const entry = { role: "assistant" as const, content, createdAt: now };
+
+    if (!session) {
+      session = await ChatSession.create({
+        userId: objId,
+        messages: [entry],
+        summary: null,
+      });
+    } else {
+      session.messages.push(entry);
+      await session.save();
+    }
+
+    await ChatHistory.updateOne(
+      { userId: objId },
+      { $push: { messages: entry } },
+      { upsert: true },
+    );
+  }
 }
 
 export default new ChatService();

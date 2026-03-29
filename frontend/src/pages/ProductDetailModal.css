@@ -63,6 +63,80 @@
 .pd-close svg { width: 14px; height: 14px; }
 .pd-close:hover { background: #fee2e2; color: #ef4444; transform: scale(1.08); }
 
+/* Post-payment: chat is obscured — show in-modal typing / success */
+.pd-payment-sync {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.93);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: pdPaymentSyncIn 0.28s ease;
+}
+@keyframes pdPaymentSyncIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.pd-payment-sync__card {
+  text-align: center;
+  max-width: 320px;
+}
+.pd-payment-sync__check {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: var(--green-pale);
+  color: var(--green-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pd-payment-sync__check svg {
+  width: 26px;
+  height: 26px;
+}
+.pd-payment-sync__title {
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 0 0 8px;
+}
+.pd-payment-sync__sub {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin: 0 0 20px;
+  line-height: 1.45;
+}
+.pd-payment-sync__dots {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.pd-payment-sync__dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green-main);
+  opacity: 0.35;
+  animation: pdPaymentDot 1.2s ease infinite;
+}
+.pd-payment-sync__dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.pd-payment-sync__dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes pdPaymentDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
 /* ══════════════════════════
    LEFT — GALLERY
 ══════════════════════════ */
@@ -291,6 +365,32 @@
   resize: vertical; min-height: 100px; line-height: 1.45;
 }
 .pd-buy-form__textarea:focus { outline: 2px solid var(--green-light); border-color: var(--green-main); }
+.pd-buy-form__waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 0.75rem;
+  padding: 12px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  color: #1e40af;
+  font-size: 14px;
+  line-height: 1.45;
+  margin-bottom: 0;
+}
+.pd-buy-form__waiting .pd-spin {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: block;
+  margin-top: 2px;
+}
+.pd-buy-form__waiting-text {
+  flex: 1;
+  min-width: 0;
+}
+
 .pd-buy-form__success {
   font-size: 0.82rem; color: var(--green-main); margin: 0; line-height: 1.4;
 }

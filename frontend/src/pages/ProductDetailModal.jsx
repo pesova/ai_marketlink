@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./ProductDetailModal.css";
-import { createOrderOrThrow } from "../services/orderService";
+import { createOrderOrThrow, fetchOrderById } from "../services/orderService";
 import { initiatePayment } from "../services/paymentService";
 import { openPaymentInNewTab } from "../utils/openPaymentLink";
 
@@ -75,15 +75,40 @@ function mongoIdString(p) {
   return String(raw);
 }
 
-export default function ProductDetailModal({ product, onClose }) {
+const PAID_LIKE = new Set([
+  "PAID_IN_ESCROW",
+  "SHIPPED",
+  "DELIVERED_PENDING_CONFIRMATION",
+  "COMPLETED",
+]);
+
+const POLL_MS = 3000;
+const POLL_MAX_MS = 10 * 60 * 1000;
+/** Modal stays up this long (min) so users see success + “typing” — chat is covered by the overlay. */
+const POST_PAYMENT_DWELL_MS = 2600;
+
+export default function ProductDetailModal({ product, onClose, onPaymentSettled }) {
   const [activeImg, setActiveImg] = useState(0);
   const [buyLoading, setBuyLoading] = useState(false);
   const [buyError, setBuyError] = useState("");
   const [deliveryAddressOnly, setDeliveryAddressOnly] = useState("");
   const [paymentOpenedHint, setPaymentOpenedHint] = useState(false);
   const [manualPaymentUrl, setManualPaymentUrl] = useState("");
+  const [awaitingPaymentConfirm, setAwaitingPaymentConfirm] = useState(false);
+  const [paymentConfirmNote, setPaymentConfirmNote] = useState("");
+  const [postPaymentSync, setPostPaymentSync] = useState(false);
+  const pollRef = useRef(null);
+  const pollStartRef = useRef(0);
+  const paymentSettleRef = useRef(false);
 
   const pid = mongoIdString(product);
+
+  const clearPoll = () => {
+    if (pollRef.current != null) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
 
   useEffect(() => {
     setBuyError("");
@@ -92,7 +117,14 @@ export default function ProductDetailModal({ product, onClose }) {
     setDeliveryAddressOnly("");
     setPaymentOpenedHint(false);
     setManualPaymentUrl("");
+    setAwaitingPaymentConfirm(false);
+    setPaymentConfirmNote("");
+    setPostPaymentSync(false);
+    paymentSettleRef.current = false;
+    clearPoll();
   }, [pid]);
+
+  useEffect(() => () => clearPoll(), []);
 
   if (!product) return null;
 
@@ -165,6 +197,49 @@ export default function ProductDetailModal({ product, onClose }) {
         setManualPaymentUrl(paymentUrl);
         setBuyError("Pop-up blocked. Open the payment link below or allow pop-ups for this site.");
       }
+
+      setAwaitingPaymentConfirm(true);
+      setPaymentConfirmNote("");
+      pollStartRef.current = Date.now();
+      clearPoll();
+      pollRef.current = setInterval(async () => {
+        if (Date.now() - pollStartRef.current > POLL_MAX_MS) {
+          clearPoll();
+          setAwaitingPaymentConfirm(false);
+          setPaymentConfirmNote(
+            "We have not received confirmation yet. If you already paid, check My orders — the chat will update when the payment clears.",
+          );
+          return;
+        }
+        try {
+          const body = await fetchOrderById(orderId);
+          const ord = body?.data;
+          const st = ord?.status;
+          if (st && PAID_LIKE.has(st)) {
+            if (paymentSettleRef.current) return;
+            paymentSettleRef.current = true;
+            clearPoll();
+            setAwaitingPaymentConfirm(false);
+            setPaymentConfirmNote("");
+            setPostPaymentSync(true);
+            (async () => {
+              try {
+                const dwell = new Promise((r) => setTimeout(r, POST_PAYMENT_DWELL_MS));
+                const sync = onPaymentSettled?.() ?? Promise.resolve();
+                await Promise.all([dwell, sync]);
+              } catch {
+                /* still close */
+              } finally {
+                setPostPaymentSync(false);
+                paymentSettleRef.current = false;
+                onClose();
+              }
+            })();
+          }
+        } catch {
+          /* ignore transient errors while polling */
+        }
+      }, POLL_MS);
     } catch (err) {
       setBuyError(err.response?.data?.message || err.message || "Could not start checkout.");
     } finally {
@@ -182,12 +257,44 @@ export default function ProductDetailModal({ product, onClose }) {
     <div
       className="pd-overlay"
       role="presentation"
-      onClick={(ev) => ev.target === ev.currentTarget && !buyLoading && onClose()}
+      onClick={(ev) => {
+        if (ev.target !== ev.currentTarget || buyLoading || postPaymentSync) return;
+        clearPoll();
+        setAwaitingPaymentConfirm(false);
+        onClose();
+      }}
     >
       <div className="pd-modal">
-        <button type="button" className="pd-close" onClick={() => !buyLoading && onClose()} aria-label="Close">
+        <button
+          type="button"
+          className="pd-close"
+          onClick={() => {
+            if (buyLoading || postPaymentSync) return;
+            clearPoll();
+            setAwaitingPaymentConfirm(false);
+            onClose();
+          }}
+          aria-label="Close"
+        >
           <IconX />
         </button>
+
+        {postPaymentSync && (
+          <div className="pd-payment-sync" role="status" aria-live="polite">
+            <div className="pd-payment-sync__card">
+              <div className="pd-payment-sync__check" aria-hidden>
+                <IconShield />
+              </div>
+              <p className="pd-payment-sync__title">Payment received</p>
+              <p className="pd-payment-sync__sub">Adding confirmation to your chat…</p>
+              <div className="pd-payment-sync__dots" aria-hidden>
+                <span />
+                <span />
+                <span />
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="pd-gallery">
           <div
@@ -316,12 +423,25 @@ export default function ProductDetailModal({ product, onClose }) {
                   placeholder="e.g. 12 Adeola Odeku St, Victoria Island, Lagos. Phone: +234…"
                   rows={4}
                   required
-                  disabled={buyLoading}
+                  disabled={buyLoading || awaitingPaymentConfirm || postPaymentSync}
                 />
               </label>
               {paymentOpenedHint && (
                 <p className="pd-buy-form__success" role="status">
                   Payment page opened in a new tab. Complete checkout there — you can keep this window open.
+                </p>
+              )}
+              {awaitingPaymentConfirm && (
+                <p className="pd-buy-form__waiting" role="status">
+                  <IconLoader />
+                  <span className="pd-buy-form__waiting-text">
+                    Waiting for payment confirmation… This usually takes a few seconds after you pay.
+                  </span>
+                </p>
+              )}
+              {paymentConfirmNote && (
+                <p className="pd-buy-form__manual-link" role="status">
+                  {paymentConfirmNote}
                 </p>
               )}
               {manualPaymentUrl && (
@@ -361,11 +481,19 @@ export default function ProductDetailModal({ product, onClose }) {
             <button
               type="submit"
               className="pd-btn pd-btn--buy pd-btn--buy-full"
-              disabled={stock === 0 || buyLoading}
+              disabled={stock === 0 || buyLoading || awaitingPaymentConfirm || postPaymentSync}
             >
               {buyLoading ? (
                 <>
                   <IconLoader /> Starting payment…
+                </>
+              ) : postPaymentSync ? (
+                <>
+                  <IconLoader /> Finishing up…
+                </>
+              ) : awaitingPaymentConfirm ? (
+                <>
+                  <IconLoader /> Confirming payment…
                 </>
               ) : (
                 <>

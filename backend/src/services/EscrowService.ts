@@ -3,6 +3,7 @@ import { EscrowTransaction, EscrowStatus } from "../models/EscrowTransaction";
 import { Order, OrderStatus } from "../models/Order";
 import env from "../config/env";
 import NotificationService from "./NotificationService";
+import ChatService from "./ChatService";
 import { NotificationCategoryEnum } from "../interfaces/INotification";
 import { IVendor } from "../models";
 import { PopulatedOrder } from "../interfaces/IEscrow";
@@ -121,6 +122,21 @@ class EscrowService {
     if (!order) {
       return;
     }
+
+    const productName =
+      typeof typedOrder.product === "object" && typedOrder.product?.name
+        ? typedOrder.product.name
+        : "your order";
+    const buyerId = order.buyer._id?.toString?.() ?? String(order.buyer._id);
+    const chatLine =
+      `Payment received — we've secured ₦${Number(order.totalAmount).toLocaleString()} for ${productName}. ` +
+      `Your funds are in escrow until you confirm delivery. Track this order anytime from My orders.`;
+    try {
+      await ChatService.appendAssistantMessage(buyerId, chatLine);
+    } catch (err) {
+      console.error("[escrow] chat payment notice failed:", err);
+    }
+
     await NotificationService.setTo({
       userId: order.buyer._id,
       email: order.buyer.email,

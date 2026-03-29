@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useContext } from "react";
+import { useState, useEffect, useRef, useContext, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import "./ChatPage.css";
 import ProductDetailModal from "./ProductDetailModal";
@@ -127,11 +127,16 @@ const buildMessagesFromHistory = (historyItems) => {
   return msgs;
 };
 
+const HISTORY_POLL_INTERVAL_MS = 2 * 60 * 1000;
+/** Let the typing row paint before fetch (React commit). */
+const TYPING_PAINT_MS = 150;
+
 export default function ChatPage() {
   const navigate = useNavigate();
   const { logout } = useContext(AuthContext);
   const [messages, setMessages]     = useState([]);
   const [isTyping, setIsTyping]     = useState(false);
+  const [historySyncTyping, setHistorySyncTyping] = useState(false);
   const [error, setError]           = useState("");
   const [input, setInput]           = useState("");
   const [selected, setSelected]     = useState(null);
@@ -140,6 +145,42 @@ export default function ChatPage() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const messagesEndRef              = useRef(null);
   const inputRef                    = useRef(null);
+  const isTypingRef                 = useRef(false);
+  const historySyncTypingRef        = useRef(false);
+
+  useEffect(() => {
+    isTypingRef.current = isTyping;
+  }, [isTyping]);
+  useEffect(() => {
+    historySyncTypingRef.current = historySyncTyping;
+  }, [historySyncTyping]);
+
+  const refreshHistoryFromServer = useCallback(async (options = {}) => {
+    const { withTyping = false, minTypingMs = 850 } = options;
+    if (withTyping) {
+      setHistorySyncTyping(true);
+      await new Promise((r) => setTimeout(r, TYPING_PAINT_MS));
+    }
+    const started = Date.now();
+    try {
+      const res = await getHistory();
+      if (withTyping) {
+        const elapsed = Date.now() - started;
+        const remaining = Math.max(0, minTypingMs - elapsed);
+        if (remaining > 0) {
+          await new Promise((r) => setTimeout(r, remaining));
+        }
+      }
+      if (res?.success && Array.isArray(res?.data?.messages) && res.data.messages.length > 0) {
+        const last50 = res.data.messages.slice(-50);
+        setMessages(buildMessagesFromHistory(last50));
+      }
+    } catch {
+      /* keep current messages */
+    } finally {
+      if (withTyping) setHistorySyncTyping(false);
+    }
+  }, []);
 
   /* ── Load chat history on mount ── */
   useEffect(() => {
@@ -178,12 +219,20 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
+    const id = setInterval(() => {
+      if (isTypingRef.current || historySyncTypingRef.current || historyLoading) return;
+      refreshHistoryFromServer({ withTyping: true, minTypingMs: 650 });
+    }, HISTORY_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [historyLoading, refreshHistoryFromServer]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, historySyncTyping]);
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || isTyping) return;
+    if (!text || isTyping || historySyncTyping) return;
 
     setInput("");
     setError("");
@@ -367,14 +416,17 @@ export default function ChatPage() {
               </div>
             ))}
 
-            {/* Typing indicator */}
-            {isTyping && (
+            {/* Typing indicator — LLM reply or history sync */}
+            {(isTyping || historySyncTyping) && (
               <div className="cp-msg cp-msg--ai">
                 <BotAvatarSm />
                 <div className="cp-msg__content">
                   <div className="cp-msg__bubble cp-msg__bubble--typing">
                     <span/><span/><span/>
                   </div>
+                  {historySyncTyping && !isTyping && (
+                    <p className="cp-msg__sync-hint">Updating conversation…</p>
+                  )}
                 </div>
               </div>
             )}
@@ -405,12 +457,12 @@ export default function ChatPage() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
               placeholder="Type your message..."
-              disabled={isTyping || historyLoading}
+              disabled={isTyping || historySyncTyping || historyLoading}
             />
             <button
-              className={`cp-send-btn${input.trim() && !isTyping ? " active" : ""}`}
+              className={`cp-send-btn${input.trim() && !isTyping && !historySyncTyping ? " active" : ""}`}
               onClick={handleSend}
-              disabled={!input.trim() || isTyping || historyLoading}
+              disabled={!input.trim() || isTyping || historySyncTyping || historyLoading}
             >
               <IconSend />
             </button>
@@ -426,7 +478,14 @@ export default function ChatPage() {
       )}
 
       {/* Product detail + buy (order + payment redirect) */}
-      <ProductDetailModal product={selected} onClose={() => setSelected(null)} />
+      <ProductDetailModal
+        product={selected}
+        onClose={() => setSelected(null)}
+        onPaymentSettled={async () => {
+          await refreshHistoryFromServer({ withTyping: true, minTypingMs: 2800 });
+          setTimeout(() => refreshHistoryFromServer({ withTyping: false }), 400);
+        }}
+      />
     </div>
   );
 }

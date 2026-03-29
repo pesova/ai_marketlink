@@ -45,3 +45,8 @@ export const confirmBuyerDelivery = async (orderId) => {
   const response = await apiClient.patch(`/orders/${orderId}/confirm-delivery`);
   return response.data;
 };
+
+export const fetchOrderById = async (orderId) => {
+  const response = await apiClient.get(`/orders/${orderId}`);
+  return response.data;
+};

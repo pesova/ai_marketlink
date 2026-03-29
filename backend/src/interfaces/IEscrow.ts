@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { IOrder } from "../models";
 
-export type PopulatedOrder = Omit<IOrder, 'buyer' | 'vendor'> & {
+export type PopulatedOrder = Omit<IOrder, 'buyer' | 'vendor' | 'product'> & {
   buyer: {
     _id: mongoose.Types.ObjectId;
     name: string;
@@ -16,4 +16,5 @@ export type PopulatedOrder = Omit<IOrder, 'buyer' | 'vendor'> & {
       email: string;
     };
   };
+  product?: { name: string };
 };
