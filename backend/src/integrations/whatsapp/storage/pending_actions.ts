@@ -13,6 +13,7 @@ export interface WhatsAppSession {
   step: ConversationStep;
   searchResults?: any[];
   selectedProduct?: any;
+  draftDeliveryAddress?: string;
   currentOrderId?: string;
   lastActivity: string;
 }
@@ -21,13 +22,14 @@ export type ConversationStep =
   | 'AWAITING_INTENT'
   | 'AWAITING_SELECTION'
   | 'AWAITING_DELIVERY_ADDRESS'
+  | 'AWAITING_ORDER_CONFIRM'
   | 'ORDER_CREATED'
   | 'VENDOR_MENU'
   | 'VENDOR_AWAITING_SHIP_ID'
   | 'VENDOR_AWAITING_DELIVERED_ID';
 
 export interface PendingAction {
-  type: 'PRODUCT_SELECTION' | 'DELIVERY_ADDRESS' | 'VENDOR_ACTION';
+  type: 'PRODUCT_SELECTION' | 'DELIVERY_ADDRESS' | 'ORDER_CONFIRM' | 'VENDOR_ACTION';
   payload?: Record<string, any>;
   createdAt?: string;
 }

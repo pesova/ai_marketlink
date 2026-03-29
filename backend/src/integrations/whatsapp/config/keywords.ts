@@ -36,3 +36,9 @@ export function isVendorMenuMessage(text: string): boolean {
   const lower = text.toLowerCase().trim();
   return VENDOR_KEYWORDS.some((k) => lower.includes(k));
 }
+
+/** Buyer confirms quoted order before payment link is created (not delivery confirmation). */
+export function isPlaceOrderConfirmMessage(text: string): boolean {
+  const lower = text.toLowerCase().trim();
+  return lower === 'confirm' || lower === 'yes' || lower === 'ok';
+}

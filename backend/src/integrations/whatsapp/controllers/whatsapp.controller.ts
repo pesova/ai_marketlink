@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import whatsappAuthService from "../services/whatsappAuth.service";
 import {
+  sendImageWithCaption,
   sendTextMessage,
   sendTypingIndicator,
 } from "../services/whatsapp.service";
 import env from "../../../config/env";
-import { Vendor } from "../../../models";
+import { Product, Vendor } from "../../../models";
 import { parseIncomingMessage } from "../services/message_parser";
 import ChatService from "../../../services/ChatService";
 import {
@@ -20,6 +21,7 @@ import {
 import {
   isCancelMessage,
   isConfirmDeliveryMessage,
+  isPlaceOrderConfirmMessage,
   isStatusMessage,
   isVendorMenuMessage,
 } from "../config/keywords";
@@ -62,6 +64,8 @@ export const handleIncomingMessage = async (
       if (!identified) return; // sent "please register" message
     }
 
+    const pending = await getPendingAction(phone);
+
     if (message.type === "text") {
       if (isCancelMessage(message.text)) {
         await resetUserState(phone);
@@ -77,8 +81,16 @@ export const handleIncomingMessage = async (
         return;
       }
 
-      // ── STEP 4: Global delivery confirm ─────────────────────────
-      if (isConfirmDeliveryMessage(message.text) && session.currentOrderId) {
+      // Buyer "confirm" after quote must go to ORDER_CONFIRM handler, not delivery —
+      // currentOrderId can still be set from an older unpaid order.
+      const awaitingCheckoutConfirm =
+        pending?.type === "ORDER_CONFIRM" ||
+        session.step === "AWAITING_ORDER_CONFIRM";
+      if (
+        isConfirmDeliveryMessage(message.text) &&
+        session.currentOrderId &&
+        !awaitingCheckoutConfirm
+      ) {
         await handleConfirmDelivery(phone, session);
         return;
       }
@@ -88,7 +100,6 @@ export const handleIncomingMessage = async (
       return;
     }
 
-    const pending = await getPendingAction(phone);
     const text = message.text;
 
     if (pending?.type === "PRODUCT_SELECTION") {
@@ -98,6 +109,11 @@ export const handleIncomingMessage = async (
 
     if (pending?.type === "DELIVERY_ADDRESS") {
       await handleDeliveryAddress(phone, session, text);
+      return;
+    }
+
+    if (pending?.type === "ORDER_CONFIRM") {
+      await handleOrderPlacementConfirm(phone, session, text);
       return;
     }
 
@@ -188,7 +204,7 @@ async function handleProductSelection(
 
   // Try numeric selection first
   const index = parseInt(text.trim()) - 1;
-  const selected = !isNaN(index) ? products[index] : null;  
+  const selected = !isNaN(index) ? products[index] : null;
   if (!selected) {
     await sendTextMessage(
       phone,
@@ -197,24 +213,55 @@ async function handleProductSelection(
     return;
   }
 
-  session.selectedProduct = selected;
+  const productId =
+    typeof selected._id === "string"
+      ? selected._id
+      : selected._id?.toString?.();
+  if (!productId) {
+    await sendTextMessage(
+      phone,
+      `⚠️ Could not read that product. Please search again.`,
+    );
+    return;
+  }
+
+  const fullProduct = await Product.findById(productId).lean();
+  if (!fullProduct) {
+    await sendTextMessage(
+      phone,
+      `⚠️ That product is no longer available. Please search again.`,
+    );
+    return;
+  }
+
+  session.selectedProduct = fullProduct;
+  session.draftDeliveryAddress = undefined;
   session.step = "AWAITING_DELIVERY_ADDRESS";
   await saveSession(session);
 
-  // Swap pending action to delivery address
   await savePendingAction(phone, {
     type: "DELIVERY_ADDRESS",
     payload: {
-      productId: selected._id,
-      productName: selected.name,
-      price: selected.price,
+      productId: fullProduct._id.toString(),
+      productName: fullProduct.name,
+      price: fullProduct.price,
     },
   });
 
-  await sendTextMessage(
-    phone,
-    `✅ Great choice!\n\n*${selected.name}*\n💰 ₦${Number(selected.price).toLocaleString()}\n\nPlease send your *delivery address*:\n\n_Reply *cancel* to start over._`,
-  );
+  const priceStr = `₦${Number(fullProduct.price).toLocaleString()}`;
+  const caption =
+    `✅ Great choice!\n\n` +
+    `${fullProduct.name}\n` +
+    `💰 ${priceStr}\n\n` +
+    `Please send your delivery address:\n\n` +
+    `Reply cancel to start over.`;
+
+  const imageUrl = normalizePublicImageUrl(fullProduct.imageUrl);
+  if (imageUrl) {
+    await sendImageWithCaption(phone, imageUrl, caption);
+  } else {
+    await sendTextMessage(phone, caption);
+  }
 }
 
 async function handleDeliveryAddress(
@@ -222,6 +269,14 @@ async function handleDeliveryAddress(
   session: WhatsAppSession,
   address: string,
 ) {
+  if (isPlaceOrderConfirmMessage(address)) {
+    await sendTextMessage(
+      phone,
+      "📍 Please send your full *delivery address* first. You can confirm the order in the next step.",
+    );
+    return;
+  }
+
   if (address.trim().length < 5) {
     await sendTextMessage(
       phone,
@@ -240,13 +295,76 @@ async function handleDeliveryAddress(
     return;
   }
 
-  try {
+  const quantity = 1;
+  const unitPrice = Number(product.price);
+  const totalAmount = unitPrice * quantity;
+
+  session.draftDeliveryAddress = address.trim();
+  session.step = "AWAITING_ORDER_CONFIRM";
+  await saveSession(session);
+
+  await savePendingAction(phone, {
+    type: "ORDER_CONFIRM",
+    payload: {
+      productId: product._id.toString(),
+      deliveryAddress: address.trim(),
+    },
+  });
+
+  const quote =
+    `📋 *Order quote*\n\n` +
+    `📦 *Product:* ${product.name}\n` +
+    `🔢 *Quantity:* ${quantity}\n` +
+    `💵 *Unit price:* ₦${unitPrice.toLocaleString()}\n` +
+    `💰 *Total:* ₦${totalAmount.toLocaleString()}\n\n` +
+    `📍 *Deliver to:*\n${address.trim()}\n\n` +
+    `━━━━━━━━━━━━━━━━\n` +
+    `Reply *confirm* to place this order and get your payment link.\n\n` +
+    `_Reply *cancel* to start over._`;
+
+  await sendTextMessage(phone, quote);
+}
+
+async function handleOrderPlacementConfirm(
+  phone: string,
+  session: WhatsAppSession,
+  text: string,
+) {
+  if (isCancelMessage(text)) {
+    await resetUserState(phone);
+    await sendTextMessage(
+      phone,
+      `All cleared! You're back at the main menu.\n\n How can I help you today?`,
+    );
+    return;
+  }
+
+  if (!isPlaceOrderConfirmMessage(text)) {
+    await sendTextMessage(
+      phone,
+      `Reply *confirm* to place the order and receive your payment link, or *cancel* to start over.`,
+    );
+    return;
+  }
+
+  const product = session.selectedProduct;
+  const address = session.draftDeliveryAddress;
+  if (!product || !address) {
+    await resetUserState(phone);
+    await sendTextMessage(
+      phone,
+      "⚠️ Session expired. Please start your search again.",
+    );
+    return;
+  }
+
+  try {    
     const order = await OrderService.createOrder(session.userId!, {
-      productId: product._id,
+      productId: product._id.toString(),
       quantity: 1,
       deliveryAddress: address,
-    });
-    
+    });    
+
     const { paymentUrl, transactionRef } = await PaymentService.initiatePayment(
       order._id.toString(),
       session.userId!,
@@ -254,9 +372,10 @@ async function handleDeliveryAddress(
     );
 
     session.currentOrderId = order._id.toString();
+    session.draftDeliveryAddress = undefined;
     session.step = "ORDER_CREATED";
     await saveSession(session);
-    await clearPendingAction(phone); // no more pending — waiting for payment
+    await clearPendingAction(phone);
 
     await sendTextMessage(
       phone,
@@ -273,13 +392,23 @@ async function handleDeliveryAddress(
         `Reply *status* anytime to check your order.`,
     );
   } catch (err: any) {
-        const userMessage = err?.message?.includes("Only")
+
+    const userMessage = err?.message?.includes("Only")
       ? `❌ ${err.message}`
       : "❌ Could not create your order. Please try again.";
 
     await sendTextMessage(phone, userMessage);
-    // Keep pending action so they can retry with same product
   }
+}
+
+function normalizePublicImageUrl(url?: string | null): string | null {
+  if (!url || typeof url !== "string" || !url.trim()) return null;
+  const u = url.trim();
+  if (u.startsWith("https://")) return u;
+  if (u.startsWith("http://")) return u;
+  const base = env.FRONTEND_URL.replace(/\/$/, "");
+  const path = u.startsWith("/") ? u : `/${u}`;
+  return `${base}${path}`;
 }
 
 async function handleOrderStatus(phone: string, session: WhatsAppSession) {

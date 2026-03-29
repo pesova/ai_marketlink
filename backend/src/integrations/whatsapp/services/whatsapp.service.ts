@@ -4,6 +4,37 @@ import { WhatsAppButtonParams, WhatsAppListParams } from '../../../interfaces/wh
 
 const BASE_URL = `https://graph.facebook.com/v22.0/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
+/** Public HTTPS image URL required by WhatsApp Cloud API. */
+export async function sendImageWithCaption(
+  to: string,
+  imageLink: string,
+  caption: string,
+) {
+  try {
+    await axios.post(
+      BASE_URL,
+      {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'image',
+        image: {
+          link: imageLink,
+          caption,
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+  } catch (error: any) {
+    console.log(error.response?.data ?? error.message);
+    await sendTextMessage(to, caption);
+  }
+}
+
 export async function sendTextMessage(to: string, message: string) {    
     try {
         const res = await axios.post(
