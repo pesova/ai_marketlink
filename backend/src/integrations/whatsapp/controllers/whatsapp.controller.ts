@@ -31,6 +31,7 @@ import {
   formatVendorBalance,
 } from "../utils/templates";
 import { OrderService } from "../../../services";
+import OrderTrackingService from "../../../services/OrderTrackingService";
 import PaymentService from "../../../services/PaymentService";
 
 export const verifyWebhook = (req: Request, res: Response) => {
@@ -369,6 +370,10 @@ async function handleOrderPlacementConfirm(
       order._id.toString(),
       session.userId!,
       session.email!,
+    );
+
+    await OrderTrackingService.startTrackingOrder(phone, order._id.toString()).catch(
+      (err) => console.error("[whatsapp] order tracking start failed:", err),
     );
 
     session.currentOrderId = order._id.toString();

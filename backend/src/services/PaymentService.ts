@@ -1,6 +1,9 @@
 import EscrowService from './EscrowService';
 import { Order, OrderStatus } from '../models/Order';
+import { User } from '../models/User';
 import InterswitchProvider from './api/InterswitchProvider';
+import OrderTrackingService from './OrderTrackingService';
+import { verifyInterswitchAndFinalizeOrder } from './paymentOrderVerify';
 
 class PaymentService {
   /**
@@ -77,44 +80,65 @@ class PaymentService {
       return { success: false, message: 'No pending order found for this reference' };
     }
 
-    const amountKobo = Math.round(order.totalAmount * 100);
-    const verifyRef = order.interswitchTransactionRef || interswitchRef;
+    const result = await verifyInterswitchAndFinalizeOrder(order._id.toString());
 
-    // Re-verify with Interswitch — never trust the redirect params alone
-    let statusResult;
-    try {
-      statusResult = await InterswitchProvider.verifyTransaction(verifyRef, amountKobo);
-    } catch (err: any) {
-      console.error(`PaymentService: verification failed for ${interswitchRef}:`, err.message);
-      return { success: false, message: 'Could not verify transaction with Interswitch' };
+    if (!result.finalized) {
+      if (result.reason === 'not_paid' && result.responseCode) {
+        console.warn(
+          `PaymentService: payment not successful for ${interswitchRef} — code ${result.responseCode}`,
+        );
+        return {
+          success: false,
+          message: `Payment not confirmed (code ${result.responseCode})`,
+        };
+      }
+      if (result.reason === 'amount_mismatch') {
+        console.error(`PaymentService: amount mismatch for ${interswitchRef}`);
+        return { success: false, message: 'Payment amount mismatch' };
+      }
+      if (result.reason === 'verify_request_failed') {
+        return { success: false, message: 'Could not verify transaction with Interswitch' };
+      }
+      return { success: false, message: result.reason };
     }
 
-    if (statusResult.responseCode !== '00') {
-      console.warn(
-        `PaymentService: payment not successful for ${interswitchRef} — code ${statusResult.responseCode}: ${statusResult.responseDescription}`
+    const waPhone = await OrderTrackingService.stopTrackingByOrderId(
+      result.orderId,
+    );
+
+    if (waPhone) {
+      await OrderTrackingService.sendPaymentReceivedWhatsApp(
+        waPhone,
+        result.orderId,
+        result.totalAmount,
+      ).catch((err) =>
+        console.error('[payment] WhatsApp payment notify failed:', err),
       );
-      return {
-        success: false,
-        message: `Payment not confirmed: ${statusResult.responseDescription}`,
-      };
+    } else {
+      const paidOrder = await Order.findById(result.orderId)
+        .select('buyer')
+        .lean();
+      if (paidOrder?.buyer) {
+        const u = await User.findById(paidOrder.buyer)
+          .select('phoneNumber')
+          .lean();
+        if (u?.phoneNumber) {
+          await OrderTrackingService.sendPaymentReceivedWhatsApp(
+            u.phoneNumber,
+            result.orderId,
+            result.totalAmount,
+          ).catch((err) =>
+            console.error('[payment] WhatsApp payment notify failed:', err),
+          );
+        }
+      }
     }
-
-    // Amount guard — prevent under-payment
-    if (statusResult.amount !== amountKobo) {
-      console.error(
-        `PaymentService: amount mismatch for ${interswitchRef} — expected ${amountKobo}, got ${statusResult.amount}`
-      );
-      return { success: false, message: 'Payment amount mismatch' };
-    }
-
-    // Finalize escrow after successful verification (lookup key is Interswitch txn ref, not Mongo order id)
-    await EscrowService.resolveAndFinalize(verifyRef, statusResult.paymentReference);
 
     return {
       success:       true,
-      orderId:       order._id.toString(),
+      orderId:       result.orderId,
       interswitchRef,
-      amountNaira:   order.totalAmount,
+      amountNaira:   result.totalAmount,
     };
   }
 }

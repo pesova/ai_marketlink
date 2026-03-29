@@ -12,7 +12,5 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Error processing raw webhook:', error);
-    // Still respond 200 to avoid retries per Interswitch spec.
-    res.sendStatus(200);
   }
 };

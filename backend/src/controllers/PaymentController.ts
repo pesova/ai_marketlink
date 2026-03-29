@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import PaymentService from '../services/PaymentService';
 import InterswitchProvider from '../services/api/InterswitchProvider';
 import EscrowService from '../services/EscrowService';
+import OrderTrackingService from '../services/OrderTrackingService';
+import { Order } from '../models/Order';
+import { User } from '../models/User';
 
 /**
  * POST /api/payments/initiate
@@ -76,6 +79,27 @@ export const checkTransactionStatus = async (req: Request, res: Response) => {
         escrowRecord.interswitchRef,
         result.paymentReference,
       );
+      const orderId = escrowRecord.order.toString();
+      const waPhone = await OrderTrackingService.stopTrackingByOrderId(orderId);
+      const ord = await Order.findById(orderId).select('buyer totalAmount').lean();
+      if (ord) {
+        if (waPhone) {
+          await OrderTrackingService.sendPaymentReceivedWhatsApp(
+            waPhone,
+            orderId,
+            ord.totalAmount,
+          ).catch(() => {});
+        } else if (ord.buyer) {
+          const u = await User.findById(ord.buyer).select('phoneNumber').lean();
+          if (u?.phoneNumber) {
+            await OrderTrackingService.sendPaymentReceivedWhatsApp(
+              u.phoneNumber,
+              orderId,
+              ord.totalAmount,
+            ).catch(() => {});
+          }
+        }
+      }
     }
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {

@@ -137,38 +137,46 @@ class EscrowService {
       console.error("[escrow] chat payment notice failed:", err);
     }
 
-    await NotificationService.setTo({
-      userId: order.buyer._id,
-      email: order.buyer.email,
-    })
-      .setSubject("Payment Successful – Escrow Secured")
-      .setMessage(
-        `Your payment of ₦${order.totalAmount} has been secured in escrow. We will release it once the order is completed.`,
-      )
-      .setCategory(NotificationCategoryEnum.TRANSACTION)
-      .setDetails({
-        orderId: order._id,
-        amount: order.totalAmount,
-      })
-      .sendBoth();
-
-    const vendorUserId = typedOrder.vendor?.user?._id;
-    const vendorEmail = typedOrder.vendor?.user?.email;
-    if (vendorUserId) {
+    try {
       await NotificationService.setTo({
-        userId: vendorUserId,
-        email: vendorEmail,
+        userId: order.buyer._id,
+        email: order.buyer.email,
       })
-        .setSubject("New Order Ready for Shipment")
+        .setSubject("Payment Successful – Escrow Secured")
         .setMessage(
-          `You have received payment for order ${order._id}. Please proceed to ship the product.`,
+          `Your payment of ₦${order.totalAmount} has been secured in escrow. We will release it once the order is completed.`,
         )
         .setCategory(NotificationCategoryEnum.TRANSACTION)
         .setDetails({
           orderId: order._id,
-          product: order.product,
+          amount: order.totalAmount,
         })
         .sendBoth();
+    } catch (err) {
+      console.error("[escrow] buyer payment notification failed:", err);
+    }
+
+    const vendorUserId = typedOrder.vendor?.user?._id;
+    const vendorEmail = typedOrder.vendor?.user?.email;
+    if (vendorUserId) {
+      try {
+        await NotificationService.setTo({
+          userId: vendorUserId,
+          email: vendorEmail,
+        })
+          .setSubject("New Order Ready for Shipment")
+          .setMessage(
+            `You have received payment for order ${order._id}. Please proceed to ship the product.`,
+          )
+          .setCategory(NotificationCategoryEnum.TRANSACTION)
+          .setDetails({
+            orderId: order._id,
+            product: order.product,
+          })
+          .sendBoth();
+      } catch (err) {
+        console.error("[escrow] vendor payment notification failed:", err);
+      }
     }
   }
 

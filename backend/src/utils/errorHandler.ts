@@ -7,6 +7,10 @@ const isDev = env.NODE_ENV === 'development';
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('Global error handler:', err.message);
 
+  if (res.headersSent) {
+    return;
+  }
+
   let status = err.statusCode || err.status || 500;
   let message = err.message || 'Internal server error';
   let errors: any[] = [];

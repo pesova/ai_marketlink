@@ -2,8 +2,10 @@ import env from "./config/env";
 import app from "./app";
 import connectDB from './config/database';
 import { EscrowService } from './services';
+import OrderTrackingService from './services/OrderTrackingService';
 
 const HOUR_MS = 60 * 60 * 1000;
+const ORDER_TRACKING_POLL_MS = 1 * 60 * 1000;
 
 const start = async () => {
   try {
@@ -27,6 +29,14 @@ const start = async () => {
 
     setInterval(runEscrowAutoRelease, HOUR_MS);
     setTimeout(runEscrowAutoRelease, 15_000);
+
+    const runOrderPaymentTracking = () => {
+      OrderTrackingService.pollActiveOrders().catch((err) =>
+        console.error('[order-tracking] poll failed:', err),
+      );
+    };
+    setInterval(runOrderPaymentTracking, ORDER_TRACKING_POLL_MS);
+    setTimeout(runOrderPaymentTracking, 20_000);
   } catch (error) {
     console.error('Startup failed:', error);
     process.exit(1);

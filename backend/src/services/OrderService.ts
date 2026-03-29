@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Order, OrderStatus } from '../models/Order';
 import { CreateOrderInput } from '../validations/orderValidator';
 import EscrowService from './EscrowService';
+import OrderTrackingService from './OrderTrackingService';
 
 class OrderService {
   public async createOrder(buyerId: string, input: CreateOrderInput) {
@@ -140,6 +141,9 @@ class OrderService {
     order.status = OrderStatus.CANCELLED;
     order.cancelledAt = new Date();
     await order.save();
+
+    await OrderTrackingService.stopTrackingByOrderId(orderId).catch(() => {});
+
     return order;
   }
 }
