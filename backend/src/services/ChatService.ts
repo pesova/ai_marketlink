@@ -111,7 +111,7 @@ class ChatService {
     try {
       const r = await summaryLlm.invoke([
         new SystemMessage(
-          `You extract shopping search filters for a Nigerian marketplace. Respond with ONLY a JSON object, no markdown, keys:
+          `You extract shopping search filters for buyers using a chat-only product assistant in Nigeria. Respond with ONLY a JSON object, no markdown, keys:
 {"product": string or null, "max_price": number or null, "color": string or null, "category": string or null, "location": string or null}
 max_price is in Nigerian Naira (numeric). Use null when unknown.`,
         ),
@@ -165,8 +165,10 @@ max_price is in Nigerian Naira (numeric). Use null when unknown.`,
         filters?.location,
         userMessage,
       ]
+      
         .filter(Boolean)
         .join(" ");
+
       products = await VectorService.searchProducts(searchText, 8);
       if (filters?.max_price != null && typeof filters.max_price === "number") {
         products = products.filter((p: any) => Number(p.price) <= filters.max_price!);
@@ -190,48 +192,39 @@ max_price is in Nigerian Naira (numeric). Use null when unknown.`,
                   `${i + 1}. ${p.name} — ₦${p.price} — ${p.category} — ${p.description}`,
               )
               .join("\n")
-          : "No matching products found.";
+          : "";
     }
+
+    const authorizedListingsBlock =
+      products.length > 0
+        ? productContext
+        : "None. For this reply there are zero seller listings you are allowed to cite.";
 
     // Build system message
     const systemParts = [];
     systemParts.push(
-      `You are AI MarketLink's friendly shopping assistant.
+      `You are AI MarketLink's friendly shopping assistant. Users discover products ONLY through this chat — there is no separate catalog, browse screen, or marketplace UI to visit.
 
-        Your primary goal is to help users discover and buy products easily.
+        CATALOG BOUNDARY (non-negotiable on every message):
+        - You work ONLY from seller inventory returned for this chat turn (see AUTHORIZED LISTINGS). You must NEVER name, price, compare, recommend, or describe specific commercial products, brands, models, shops, or deals except by copying details from AUTHORIZED LISTINGS below.
+        - Do NOT use the open web, training data, or "general knowledge" to suggest or invent products. If a product is not in AUTHORIZED LISTINGS, it does not exist for you.
+        - If AUTHORIZED LISTINGS is "None" or empty: for shopping or product questions, say you don't have matching listings right now and invite them to describe what they need differently in chat (e.g. product type, budget in naira, color, use case). Do NOT tell them to browse, open a shop, or search elsewhere in the app — that does not exist. Give zero example product names, brands, or prices. You may still chat about non-shopping topics without naming products to sell.
+        - Conversation history and summaries are context only; they do NOT add products. Only AUTHORIZED LISTINGS may be quoted for items for sale.
+        - When listings are present, you may present them with name, price (₦), and short description taken only from those lines.
 
-        CORE BEHAVIOR:
-        - You can answer general questions and engage in normal conversation.
-        - ALWAYS answer the user's question clearly and helpfully first, no matter the topic.
-        - However, you should naturally guide the conversation back to helping the user find, compare, or buy products — but ONLY when it feels relevant or not forced..
-
-        CRITICAL RULES — follow these strictly:
-        1. You ALWAYS have access to real product listings. NEVER say products are unavailable, out of stock, or not found unless the Product Context below explicitly contains "No matching products found."
-        2. When products are listed in the Product Context, present them enthusiastically with name, price, and a short description.
-        3. Do NOT make up products. Only reference what is in the Product Context.
-        4. If the user asks something unrelated (e.g. jokes, life advice, random topics), respond briefly but then smoothly steer the conversation back to shopping or ask if they are looking for any product.
-        5. Keep tone conversational, warm, and helpful — like a smart, friendly Nigerian market vendor.
-        6. Avoid long off-topic discussions. Keep non-shopping responses short and redirect.
-
-        EXAMPLES OF REDIRECTION:
-        - "Haha, that's funny 😄 By the way, are you looking for anything to buy today?"
-        - "I can help with that! Also, if you need any products, I can find the best options for you."
-        - "Nice question! While you're here, I can also help you get great deals on anything you need."
-
-        Remember: You are not just a chatbot — you are a shopping assistant focused on helping users find products.`,
+        Tone: warm, conversational Nigerian market vendor energy. Keep off-topic replies brief; you may gently invite them to keep chatting and say what they're looking for, without claiming you can suggest items outside AUTHORIZED LISTINGS.`,
     );
 
     if (session.summary) {
       systemParts.push(`Previous conversation summary: ${session.summary}`);
     }
-    if (intent) {
-      systemParts.push(
-        products && products.length > 0
-          ? `AVAILABLE PRODUCTS (these are real listings — present them to the buyer):\n${productContext}`
-          : `Product Context: No matching products found.`,
-      );
-    }
+
+    systemParts.push(
+      `AUTHORIZED LISTINGS (the ONLY items you may mention; each numbered line is one seller listing):\n${authorizedListingsBlock}`,
+    );
+
     const systemMessage = new SystemMessage(systemParts.join("\n\n"));
+    
     const priorMessages = session.messages.map((msg) =>
       msg.role === "user"
         ? new HumanMessage(msg.content)

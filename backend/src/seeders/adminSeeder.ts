@@ -26,6 +26,7 @@ const seedAdmin = async () => {
   await User.create({
     name: 'Super Admin',
     email: 'admin@yopmail.com',
+    phoneNumber: '+2348123456789',
     password: hashedPassword,
     isEmailVerified: true,
     roleId: adminRole._id

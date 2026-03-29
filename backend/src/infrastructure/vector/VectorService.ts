@@ -47,39 +47,56 @@ class VectorService {
    */
   async searchProducts(queryText: string, limit: number = 10): Promise<any[]> {
     try {
-      // Generate embedding for the query
-      
       const queryEmbedding = await this.generateEmbedding(queryText);
 
-      // Perform vector search using MongoDB's $vectorSearch aggregation
-      const results = await Product.aggregate([
+      const vectorResults = await Product.aggregate([
         {
           $vectorSearch: {
             index: "product_vector_index",
             path: "embedding",
             queryVector: queryEmbedding,
-            numCandidates: limit * 10, // Consider more candidates for better results
-            limit: limit,
+            numCandidates: Math.max(limit * 10, 50),
+            limit,
           },
         },
         {
           $project: {
             _id: 1,
-            name: 1,
-            description: 1,
-            price: 1,
-            category: 1,
-            quantity: 1,
-            imageUrl: 1,
-            vendor: 1,
-            createdAt: 1,
-            updatedAt: 1,
             score: { $meta: "vectorSearchScore" },
           },
         },
       ]);
 
-      return results;
+      if (vectorResults.length === 0) {
+        return [];
+      }
+
+      const idOrder = vectorResults.map((r) => r._id);
+      const scoreById = new Map(
+        vectorResults.map((r) => [r._id.toString(), r.score]),
+      );
+
+      const docs = await Product.find({
+        _id: { $in: idOrder },
+        embedding: { $exists: true, $ne: [] },
+      })
+        .select(
+          "name description price category quantity imageUrl vendor createdAt updatedAt",
+        )
+        .lean();
+
+      const docById = new Map(docs.map((d) => [d._id.toString(), d]));
+
+      const ordered: any[] = [];
+      for (const id of idOrder) {
+        const doc = docById.get(id.toString());
+        if (!doc) continue;
+        ordered.push({
+          ...doc,
+          score: scoreById.get(id.toString()),
+        });
+      }
+      return ordered;
     } catch (error) {
       console.error("Error searching products:", error);
       throw new Error("Failed to search products");

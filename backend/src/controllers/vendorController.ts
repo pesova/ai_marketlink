@@ -8,8 +8,8 @@ import { handleValidation } from "../middleware/validate";
 import NinService from "../services/api/NinService";
 import mongoose from "mongoose";
 import { AuthService } from "../services";
-import { User } from "../models";
 import { formatKoboToNaira } from "../utils";
+import env from "../config/env";
 
 // For new users — no auth required
 export const onboardVendor = async (req: Request, res: Response) => {
@@ -35,7 +35,7 @@ export const onboardVendor = async (req: Request, res: Response) => {
       // });
     }
 
-    await AuthService.register(
+    const { user, verificationToken } = await AuthService.register(
       {
         name: data.name!,
         email: data.email!,
@@ -45,8 +45,7 @@ export const onboardVendor = async (req: Request, res: Response) => {
       session,
     );
 
-    const user = await User.findOne({ email: data.email }).session(session).exec();
-    if (!user) throw new Error('Failed to create user account');
+    if (!user) throw new Error("Failed to create user account");
 
     const vendor = await VendorService.onboard(
       user._id.toString(),
@@ -67,10 +66,15 @@ export const onboardVendor = async (req: Request, res: Response) => {
 
     await session.commitTransaction();
 
+    AuthService.sendVerificationToken(user, verificationToken);
+
     return res.status(201).json({
       success: true,
-      message: 'Account and vendor profile created. Please verify your email.',
+      message:
+        "Account and vendor profile created. A verification code has been sent to your email.",
       data: { vendor, user },
+      devToken:
+        env.NODE_ENV === "development" ? verificationToken : undefined,
     });
   } catch (error: any) {
     await session.abortTransaction();
