@@ -13,7 +13,8 @@
     "seed:roles": "ts-node-dev --respawn false src/seeders/roleSeeder.ts",
     "seed:admin": "ts-node-dev --respawn false src/seeders/adminSeeder.ts",
     "seed:products": "ts-node-dev --respawn false src/seeders/productSeeder.ts",
-    "seed:all": "npm run seed:roles && npm run seed:admin"
+    "seed:all": "npm run seed:roles && npm run seed:admin",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",

@@ -787,7 +787,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
         tab === "signup" ? (
           <div className="am-body">
             <h2 className="am-title">Create Account</h2>
-            <p className="am-sub">Join Africa's trust-first marketplace</p>
+            <p className="am-sub">Chat to discover products from trusted sellers</p>
             <div className="am-tabs">
               <button className="am-tab" onClick={() => setTab("login")}>
                 Log In

@@ -1,9 +1,8 @@
-// src/utils/apiClient.js
 import axios from 'axios';
+// https://api-marketlink.pesovatech.xyz/api
 
-// Base URL should be set in Vite env variables (VITE_API_BASE_URL)
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://api-marketlink.pesovatech.xyz/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
   withCredentials: true // allow httpOnly cookies if backend sets them
 });
 

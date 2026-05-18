@@ -134,7 +134,7 @@ export default function VerifyEmail() {
         </h1>
         <p style={S.sub}>
           {status === "success"
-            ? "Your account is ready. Redirecting you to the marketplace..."
+            ? "Your account is ready. Redirecting you..."
             : `We sent a 6-digit code to ${email || "your email"}. Enter it below to verify your account.`
           }
         </p>
