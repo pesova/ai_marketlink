@@ -11,6 +11,7 @@ import {
   logout
 } from '../controllers/authController';
 import { authenticateToken } from '../middleware/auth';
+import { googleRedirect, googleCallback } from '../controllers/googleAuthController';
 
 const router = Router();
 
@@ -25,6 +26,10 @@ router.post('/forgot-password', forgotPassword);
 router.post('/verify-reset-token', verifyResetToken);
 router.post('/reset-password', resetPassword);
 
+// Google OAuth routes
+router.get('/google', googleRedirect);
+router.get('/google/callback', googleCallback);
 router.post('/logout', logout);
+
 
 export default router;

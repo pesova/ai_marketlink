@@ -15,10 +15,12 @@ const Orders = lazy(() => import('../pages/Orders.jsx'));
 const VendorDashboard = lazy(() => import('../pages/VendorDashboard.jsx'));
 const VendorProfile = lazy(() => import('../pages/VendorProfile.jsx'));
 const AdminPanel = lazy(() => import('../pages/AdminPanel.jsx'));
+const AuthCallback = lazy(() => import('../pages/AuthCallback.jsx'));
 
 const RootRoute = () => {
   const { user, loading } = useContext(AuthContext);
   if (loading) return <LoadingSpinner />;
+  if (window.location.pathname === '/auth/callback') return null;
 
   if (user) {
     if (user.role === "vendor") {
@@ -39,6 +41,7 @@ export const AppRoutes = () => (
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<RootRoute />}></Route>
+        <Route path="/auth/callback" element={<AuthCallback />} />
 
         {/* Protected routes (any authenticated user) */}
         <Route element={<ProtectedRoute />}>

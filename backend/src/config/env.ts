@@ -46,6 +46,10 @@ interface EnvironmentConfig {
 
   /** Days after "delivered / pending confirmation" before escrow auto-releases if the buyer never confirms */
   ESCROW_AUTO_RELEASE_DAYS: number;
+
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_REDIRECT_URI: string;
 }
 
 class EnvConfig {
@@ -131,6 +135,9 @@ class EnvConfig {
       REDIS_HOST: this.getString("REDIS_HOST", ""),
       REDIS_PORT: this.getNumber("REDIS_PORT", 6379),
       ESCROW_AUTO_RELEASE_DAYS: this.getNumber("ESCROW_AUTO_RELEASE_DAYS", 7),
+      GOOGLE_CLIENT_ID: this.getString("GOOGLE_CLIENT_ID", ""),
+      GOOGLE_CLIENT_SECRET: this.getString("GOOGLE_CLIENT_SECRET", ""),
+      GOOGLE_REDIRECT_URI: this.getString("GOOGLE_REDIRECT_URI", "")
     };
   }
 
@@ -272,6 +279,20 @@ class EnvConfig {
     return this.config.CLOUDINARY_API_SECRET;
   }
 
+  get GOOGLE_REDIRECT_URI(): string {
+    return this.config.GOOGLE_REDIRECT_URI;
+  }
+
+  get GOOGLE_CLIENT_SECRET(): string {
+    return this.config.GOOGLE_CLIENT_SECRET;
+  }
+
+  get GOOGLE_CLIENT_ID(): string {
+    return this.config.GOOGLE_CLIENT_ID;
+  }
+
+
+
   public validate(): void {
     const required = [
       "MONGODB_URI",
@@ -287,6 +308,9 @@ class EnvConfig {
       "WHATSAPP_VERIFY_TOKEN",
       "WHATSAPP_APP_SECRET",
       "REDIS_URL",
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "GOOGLE_REDIRECT_URI"
     ];
     const missing = required.filter((key) => !process.env[key]);
 
