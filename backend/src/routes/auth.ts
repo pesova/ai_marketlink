@@ -11,7 +11,7 @@ import {
   logout
 } from '../controllers/authController';
 import { authenticateToken } from '../middleware/auth';
-import { googleRedirect, googleCallback } from '../controllers/googleAuthController';
+import { googleRedirect, googleCallback, googleExchange } from '../controllers/googleAuthController';
 
 const router = Router();
 
@@ -29,6 +29,7 @@ router.post('/reset-password', resetPassword);
 // Google OAuth routes
 router.get('/google', googleRedirect);
 router.get('/google/callback', googleCallback);
+router.post('/google/exchange', googleExchange);
 router.post('/logout', logout);
 
 

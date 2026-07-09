@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import AuthModal from "./AuthModal";
 import Marketlink from "../assets/Marketlink.jpg";
 
@@ -282,10 +283,22 @@ const WHATSAPP_HREF = `https://wa.me/2348024280757?text=${encodeURIComponent(
 )}`;
 
 export default function LandingPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab]   = useState("login");
+  const [oauthError, setOauthError] = useState(null);
 
   const open = (tab) => { setAuthTab(tab); setAuthOpen(true); };
+
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (!error) return;
+
+    setOauthError(error);
+    setAuthTab("login");
+    setAuthOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   return (
     <>
@@ -416,7 +429,15 @@ export default function LandingPage() {
           Chat on WhatsApp
         </a>
 
-        <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} defaultTab={authTab} />
+        <AuthModal
+          isOpen={authOpen}
+          onClose={() => {
+            setAuthOpen(false);
+            setOauthError(null);
+          }}
+          defaultTab={authTab}
+          oauthError={oauthError}
+        />
       </div>
     </>
   );

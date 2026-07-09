@@ -5,7 +5,7 @@ import ChatService from '../services/ChatService';
 
 export const sendMessage = async (req: Request, res: Response) => {
   const { message } = handleValidation(chatSchema, req.body);
-  const userId = (req as any).user._id;  
+  const userId = (req as any).user._id;
   const result = await ChatService.chat(userId, message);
   res.status(200).json({ success: true, data: result });
 };

@@ -1,0 +1,15 @@
+/* Auth Callback page styling */
+.auth-callback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bg-input, #f0f0f0);
+}
+.auth-callback p {
+  margin-top: 1rem;
+  font-family: var(--font-body, 'DM Sans',sans-serif);
+  color: var(--text-1, #333);
+  font-size: 1rem;
+}

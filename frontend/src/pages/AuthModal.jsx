@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AuthModal.css";
 import { AuthContext } from "../context/AuthContext";
+import { getGoogleAuthUrl, getOAuthErrorMessage } from "../utils/googleAuth";
 
 /* ── Icons ── */
 const IconX = () => (
@@ -232,6 +233,15 @@ const IconAlertCircle = () => (
   </svg>
 );
 
+const IconGoogle = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.69 30.3 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.2C12.43 13.09 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.1 24.5c0-1.64-.15-3.21-.43-4.75H24v9.02h12.7c-.58 3.02-2.26 5.6-4.78 7.3l7.36 5.73C43.9 37.1 46.1 31.4 46.1 24.5z"/>
+    <path fill="#FBBC05" d="M10.54 28.42c-.5-1.49-.79-3.08-.79-4.72s.29-3.23.79-4.72l-7.98-6.2C.86 16.1 0 19.89 0 23.7s.86 7.6 2.56 10.92l7.98-6.2z"/>
+    <path fill="#34A853" d="M24 48c6.3 0 11.9-2.07 15.86-5.63l-7.36-5.73c-2.04 1.37-4.64 2.18-8.5 2.18-6.26 0-11.57-3.59-13.46-8.7l-7.98 6.2C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
 /* ── Field ── */
 const Field = ({
   icon: Icon,
@@ -410,7 +420,7 @@ const FeedbackScreen = ({
 );
 
 /* ── Main Modal ── */
-export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
+export default function AuthModal({ isOpen, onClose, defaultTab = "login", oauthError = null }) {
   const navigate = useNavigate();
   const auth = useContext(AuthContext);
   const [tab, setTab] = useState(defaultTab);
@@ -443,6 +453,21 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
     Array.isArray(err?.response?.data?.errors) ? err.response.data.errors : [];
 
   useEffect(() => {
+    setTab(defaultTab);
+  }, [defaultTab]);
+
+  useEffect(() => {
+    if (!isOpen || !oauthError) return;
+    setFeedback({
+      type: "error",
+      title: "Google Sign-In Failed",
+      message: getOAuthErrorMessage(oauthError),
+    });
+  }, [isOpen, oauthError]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (oauthError) return;
     setFeedback(null);
     setLoading(false);
     setForgotPw(false);
@@ -467,7 +492,7 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
       cacDocument: null,
       idDocument: null,
     }));
-  }, [tab, isOpen]);
+  }, [tab, isOpen, oauthError]);
 
   useEffect(() => {
     document.body.style.overflow = isOpen ? "hidden" : "";
@@ -585,6 +610,11 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Google OAuth redirect
+  const handleGoogleAuth = () => {
+    window.location.href = getGoogleAuthUrl();
   };
 
   const handleVerifyEmail = async (e) => {
@@ -888,6 +918,18 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
                   "Create Account"
                 )}
               </button>
+              {form.role !== "vendor" &&
+                <button
+                  type="button"
+                  className="am-btn am-btn--secondary am-google-btn"
+                  onClick={handleGoogleAuth}
+                >
+                  <span className="am-google-icon">
+                    <IconGoogle />
+                  </span>
+                  Continue with Google
+                </button>
+              }
             </form>
             <p className="am-switch">
               Already have an account?{" "}
@@ -945,6 +987,18 @@ export default function AuthModal({ isOpen, onClose, defaultTab = "login" }) {
                   "Log In"
                 )}
               </button>
+              {form.role !== "vendor" &&
+                <button
+                  type="button"
+                  className="am-btn am-btn--secondary am-google-btn"
+                  onClick={handleGoogleAuth}
+                >
+                  <span className="am-google-icon">
+                    <IconGoogle />
+                  </span>
+                  Continue with Google
+                </button>
+              }
             </form>
             <p className="am-switch">
               No account?{" "}

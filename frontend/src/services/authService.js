@@ -79,6 +79,14 @@ export const logout = async () => {
   localStorage.removeItem('accessToken');
 };
 
+export const exchangeGoogleCode = async (code) => {
+  const response = await apiClient.post('/auth/google/exchange', { code });
+  const { token, user: rawUser } = extractTokenAndUser(response.data);
+  const user = mergeUserPayload(response.data, rawUser);
+  if (token) localStorage.setItem('accessToken', token);
+  return normalizeUser(user);
+};
+
 export const fetchCurrentUser = async () => {
   const response = await apiClient.get('/auth/profile');  
   const rawUser =
