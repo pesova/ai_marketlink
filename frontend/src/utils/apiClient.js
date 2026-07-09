@@ -2,7 +2,7 @@ import axios from 'axios';
 // https://api-marketlink.pesovatech.xyz/api
 
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://api-marketlink.pesovatech.xyz/api',
   withCredentials: true // allow httpOnly cookies if backend sets them
 });
 
